@@ -1,0 +1,46 @@
+name: gitleaks
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  gitleaks:
+    name: gitleaks incremental scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install gitleaks
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/gitleaks/gitleaks/v8.30.1/install.sh | sh -s 8.30.1
+          gitleaks version
+
+      - name: Run gitleaks (incremental)
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          echo "Before SHA: ${BEFORE_SHA}"
+
+          if [[ "${BEFORE_SHA}" =~ ^0+$ ]]; then
+            echo ">>> First push to branch; scanning only HEAD commit"
+            gitleaks detect \
+              --source . \
+              --log-opts="-n 1" \
+              --no-banner \
+              --verbose
+          else
+            echo ">>> Incremental: scanning commits between ${BEFORE_SHA} and ${GITHUB_SHA}"
+            gitleaks detect \
+              --source . \
+              --log-opts="${BEFORE_SHA}..${GITHUB_SHA}" \
+              --no-banner \
+              --verbose
+          fi
