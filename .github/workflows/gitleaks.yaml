@@ -17,30 +17,22 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install gitleaks
+      - name: Determine log-opts
+        id: log_opts
         run: |
-          curl -sSfL https://raw.githubusercontent.com/gitleaks/gitleaks/v8.30.1/install.sh | sh -s 8.30.1
-          gitleaks version
+          BEFORE_SHA="${{ github.event.before }}"
+          if [[ "${BEFORE_SHA}" =~ ^0+$ ]]; then
+            # 首次推送到分支:仅扫描 HEAD 一个 commit,避免触发全量扫描
+            echo "log_opts=-n 1" >> "$GITHUB_OUTPUT"
+          else
+            # 增量:仅扫描本次 push 引入的新 commit(排除 merge commit)
+            echo "log_opts=--no-merges ${BEFORE_SHA}..${{ github.event.after }}" >> "$GITHUB_OUTPUT"
+          fi
+          cat "$GITHUB_OUTPUT"
 
       - name: Run gitleaks (incremental)
+        uses: gitleaks/gitleaks-action@v2
         env:
-          BEFORE_SHA: ${{ github.event.before }}
-        run: |
-          set -euo pipefail
-          echo "Before SHA: ${BEFORE_SHA}"
-
-          if [[ "${BEFORE_SHA}" =~ ^0+$ ]]; then
-            echo ">>> First push to branch; scanning only HEAD commit"
-            gitleaks detect \
-              --source . \
-              --log-opts="-n 1" \
-              --no-banner \
-              --verbose
-          else
-            echo ">>> Incremental: scanning commits between ${BEFORE_SHA} and ${GITHUB_SHA}"
-            gitleaks detect \
-              --source . \
-              --log-opts="${BEFORE_SHA}..${GITHUB_SHA}" \
-              --no-banner \
-              --verbose
-          fi
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: --log-opts="${{ steps.log_opts.outputs.log_opts }}" --no-git
