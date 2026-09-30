@@ -23,7 +23,7 @@ const alias = {
 const jiti = createJiti(import.meta.url, { alias, moduleCache: false });
 const pkg = await jiti.import(path.join(piInstall, "@earendil-works/pi-coding-agent/dist/index.js"));
 const anchorsPath = fileURLToPath(new URL("../.pi/extensions/prompt-jump/anchors.ts", import.meta.url));
-const { findTranscript, findChatContainer, collectUserEntries, measureAnchors } = await jiti.import(anchorsPath);
+const { findChatContainer, collectUserEntries, measureAnchors, resolveConversationView, renderConversationLines } = await jiti.import(anchorsPath);
 
 const { SkillInvocationMessageComponent, UserMessageComponent, initTheme } = pkg;
 initTheme(); // 组件构造依赖全局主题(仅测试环境需要)
@@ -44,6 +44,7 @@ const text = (lines) => ({ render: () => lines, invalidate() {} });
  *  doc = [header(1行), chat]
  *  chat = [user1(2行), assistant(1行), spacer(1行), skill块(2行,锚点), spacer(1行), skill附属user(1行,不锚)]
  *  期望:e1 offset=1,e2 offset=1+2+1+1=5
+ *  fullscren=true 时经 getPrimaryScrollView 暴露;false 时把 doc 放在 tui.children[0](regular 结构)
  */
 function makeFakeTUI({ mode = "fullscreen" } = {}) {
 	const header = text(["=== header ==="]);
@@ -75,16 +76,13 @@ function makeFakeTUI({ mode = "fullscreen" } = {}) {
 		viewportHeight: 10,
 		child: doc,
 	};
-	return {
-		tui: {
-			mode,
-			terminal: { columns: 80, rows: 24 },
-			getPrimaryScrollView: () => sv,
-		},
-		sv,
-		doc,
-		chat,
+	const tui = {
+		mode,
+		terminal: { columns: 80, rows: 24 },
+		...(mode === "fullscreen" ? { getPrimaryScrollView: () => sv } : {}),
+		...(mode === "regular" ? { children: [doc, { children: [], render: () => [] }] } : {}),
 	};
+	return { tui, sv, doc, chat };
 }
 
 function makeFakeCtx(entries) {
@@ -92,16 +90,14 @@ function makeFakeCtx(entries) {
 }
 
 // ---- 用例 ------------------------------------------------------------------
-console.log("findTranscript:");
+console.log("resolveConversationView:");
 {
 	const { tui } = makeFakeTUI();
-	check("fullscreen + 合法结构 → 返回 ref", findTranscript(tui) != null);
-	check("regular 模式 → undefined", findTranscript({ ...tui, mode: "regular" }) === undefined);
-	check("无 getPrimaryScrollView → undefined", findTranscript({ mode: "fullscreen", terminal: { columns: 80 } }) === undefined);
-	check(
-		"sv 缺 scrollTo → undefined",
-		findTranscript({ mode: "fullscreen", terminal: { columns: 80 }, getPrimaryScrollView: () => ({ getContentWidth: () => 80 }) }) === undefined,
-	);
+	check("fullscreen + 合法结构 → 返回 view(doc/chat/宽度)", (() => { const v = resolveConversationView(tui); return v != null && v.chat != null && v.contentWidth === 80; })());
+	const regular = makeFakeTUI({ mode: "regular" });
+	check("regular 模式(doc 在 tui.children 中)→ 同样返回 view", (() => { const v = resolveConversationView(regular.tui); return v != null && v.chat != null && v.contentWidth === 80; })());
+	check("无文档结构 → undefined", resolveConversationView({ mode: "regular", terminal: { columns: 80 }, children: [text(["x"])] }) === undefined);
+	check("terminal 尺寸缺失 → undefined", resolveConversationView({ mode: "regular" }) === undefined);
 }
 
 console.log("findChatContainer:");
@@ -139,6 +135,18 @@ console.log("measureAnchors:");
 	check("entryId 对应", result[0].entryId === "e1" && result[1].entryId === "e2");
 	check("e1 偏移 = 1(header 之后)", result[0].offset === 1);
 	check("e2 偏移 = 5(跳过 user1+assistant+spacer)", result[1].offset === 5);
+	const regular = makeFakeTUI({ mode: "regular" });
+	const regularResult = measureAnchors(regular.tui, ctx);
+	check("regular 模式测量结果与 fullscreen 一致", JSON.stringify(regularResult) === JSON.stringify(result));
+}
+
+console.log("renderConversationLines:");
+{
+	const { tui } = makeFakeTUI();
+	const { lines, contentWidth } = renderConversationLines(tui);
+	check("返回全部文档行", lines.length === 8); // header 1 + chat 7
+	check("宽度与 view 一致", contentWidth === 80);
+	check("锚点行内容对齐(e1 首行即 lines[1])", lines[1] === "[user 1 line a]");
 }
 {
 	const { tui } = makeFakeTUI();

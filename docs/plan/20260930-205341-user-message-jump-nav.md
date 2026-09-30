@@ -2,11 +2,11 @@
 
 ## 背景与交互设计
 
-参考 Pi 原生 `/tree` 命令的列表交互,做一个 `/jump` 命令:弹出与 `/tree` 同款的会话树选择器(初始过滤为"仅用户消息"),选中某条用户消息后**不切换会话分支**,而是让 transcript 滚动到该消息所在位置:
+参考 Pi 原生 `/tree` 命令的列表交互,做一个 `/jump` 命令:弹出与 `/tree` 同款的会话树选择器(初始过滤为"仅用户消息"),选中某条用户消息后**不切换会话分支**,而是打开**消息查看器(pager)**:
 
-- **`/jump` 命令(唯一交互入口)**:复用 Pi 导出的 `TreeSelectorComponent`(初始过滤 `user-only`,只显示用户消息,保留其搜索/折叠/分支展示能力);回车/点击某条 → transcript 滚动到该用户消息位置,且消息首行统一显示在 CLI 窗口顶部(首条消息也自然如此,scrollTo 自动夹紧边界,行为一致无特例);选中不在当前活动分支上的消息时提示"该消息不在当前分支";Esc 取消。
-- **滚动自由度不受影响(关键约束)**:跳转只调用一次 `ScrollView.scrollTo`,不锁定、不劫持任何滚动行为——跳转后用户仍可用滚轮上下滚动、拖动滚动条浏览整个会话(从头到尾全部可见);后续新消息到达时的跟随滚动也保持原生行为。
-- **降级**:regular(非 fullscreen)模式下终端滚动条归终端所有、无 ScrollView 可滚动 → `/jump` 提示需切换 fullscreen(`/settings` → tui-mode)。
+- **`/jump` 命令(唯一交互入口)**:复用 Pi 导出的 `TreeSelectorComponent`(初始过滤 `user-only`,只显示用户消息,保留其搜索/折叠/分支展示能力);选中不在当前活动分支上的消息时提示"该消息不在当前分支";Esc 取消。
+- **消息查看器(pager,选中后打开)**:覆盖整个终端窗格的 overlay,以选中消息首行对齐窗口顶部;之后可用 ↑↓/j/k 逐行滚动、f/空格/PgDn 下翻一页、b/PgUp 上翻一页、d/u 半页、g/G 首尾、滚轮(fullscreen 模式)、q/Esc/Ctrl+C 退出。效果类似 bash 里 `git log | less` 的翻阅体验。翻阅的是打开时刻的会话文档渲染行(冻结视图),不影响宿主任何状态;regular 与 fullscreen 模式行为一致。
+- **设计变更记录(2026-09-30)**:初版设计为 fullscreen 下直接 `ScrollView.scrollTo`;因用户主要在 regular 模式小窗使用(该模式下终端原生 scrollback 无法程序化滚动),改为 pager overlay 方案,两模式统一,同时满足"选中消息显示在窗口顶部"与"后续可自由翻阅全部内容"两个核心诉求。
 
 ## 已验证的关键技术事实(Pi 0.87.1)
 
@@ -51,12 +51,23 @@ pi-prompt-jump/
    - [ ] 可选快捷键注册(决定不默认绑定,避免与编辑器按键冲突;需要时可自行加 registerShortcut)
 7. 创建 `README.md` — 中文说明:功能简介、启用方式(项目信任自动加载 / `pi --extension` 显式加载)、需 fullscreen 模式、已知限制与降级策略。
    - [x] README 完成
-8. 手动测试 — 本仓库 `pi --extension ./.pi/extensions/prompt-jump/index.ts` + `/settings` 切 fullscreen,逐项验证并在进度记录中标记结果:
+8. 手动测试(pager 方案) — 本仓库 `pi --extension ./.pi/extensions/prompt-jump/index.ts`,regular 与 fullscreen 两种模式分别验证,逐项勾选:
    - [ ] 多轮对话后 `/jump` 外观同 /tree、默认仅列用户消息
-   - [ ] 回车后目标消息首行在窗口顶部(含选首条用户消息)
-   - [ ] 跳转后滚轮/滚动条可浏览整个会话(开头与末尾均可到达),新消息跟随正常
-   - [ ] Esc 取消无副作用;选中非当前分支消息提示正确
-   - [ ] 边界:空会话/单消息/`/tree` 切换分支后再跳/压缩后再跳/窗口 resize 后再跳/regular 模式提示不报错
+   - [ ] 选中后打开 pager,目标消息首行显示在窗口顶部(含选首条用户消息)
+   - [ ] pager 内 ↑↓/j/k 逐行、f/空格/b 翻页、d/u 半页、g/G 首尾均可用
+   - [ ] fullscreen 模式下滚轮可翻阅;regular 模式下键盘可用
+   - [ ] q/Esc/Ctrl+C 退出后回到正常编辑状态,无副作用
+   - [ ] 选中非当前分支消息提示正确;空会话提示正确
+   - [ ] 边界:单消息/`/tree` 切换分支后再跳/压缩后再跳/pager 打开时改窗口尺寸(尺寸在打开时定格,已知限制)/rpc+json 模式提示不报错
+9. 设计变更:重构 anchors.ts 支持双模式 — `resolveConversationView(tui)` 统一解析(fullscreen 经 getPrimaryScrollView,regular 探测 tui.children 中的文档容器),新增 `renderConversationLines(tui)` 渲染整份文档行(带宽度缓存)供 pager 使用;measureAnchors 改用 view,不再依赖 sv.scrollTo。
+   - [x] resolveConversationView 双模式实现
+   - [x] renderConversationLines 实现(WeakMap 按文档缓存 + 宽度失效)
+   - [x] 单测更新:21 项断言全部通过(含 regular 模式一致性、锚点行内容对齐)
+10. 新建 pager.ts 消息查看器 — 覆盖整窗的 overlay 组件:首行对齐目标消息,键盘(↑↓/j/k/f/空格/b/d/u/g/G/q/Esc/Ctrl+C)、滚轮(fullscreen)、底部状态栏(位置 + 按键提示,visibleWidth 补齐)。
+    - [x] MessagePager 实现(位置钳制、冻结视图、状态栏)
+11. 改造 jump-list.ts 与 index.ts — 选择器选中后二次 `ctx.ui.custom` 打开 pager overlay(tui 在工厂内捕获后供 overlayOptions 求值,尺寸打开时定格);去掉 fullscreen 门槛与 scrollTo 路径;命令描述更新。
+    - [x] 两段式交互(选择器 → pager)接线
+    - [x] 模式守卫更新(不再要求 fullscreen)
 
 ## 风险与说明
 
@@ -73,4 +84,6 @@ pi-prompt-jump/
 | 2026-09-30 | 5 jump-list.ts 选择器封装 | 完成:TreeSelector user-only、选中滚动/未命中提示/Esc 三路径;快捷键决定不默认绑定 |
 | 2026-09-30 | 6 index.ts 入口接线 | 完成:/jump 注册、tui/fullscreen/rpc+json 模式守卫 |
 | 2026-09-30 | 7 README | 完成 |
-| 待定 | 8 手动测试 | 待用户在 fullscreen 模式下逐项验证(清单见步骤 8) |
+| 2026-09-30 | 手动验收反馈 | 用户以 regular 模式小窗使用为主,要求非 fullscreen 可用;核心诉求改为"选中消息显示在窗口顶部 + 可翻阅全部内容" |
+| 2026-09-30 | 9-11 设计变更:pager 方案 | 完成:anchors 双模式重构、pager.ts、jump-list 两段式接线;单测 21 项全部通过,加载冒烟通过 |
+| 待定 | 8 手动测试(pager 方案) | 待用户在 regular 与 fullscreen 两模式下逐项验证(清单见步骤 8) |
