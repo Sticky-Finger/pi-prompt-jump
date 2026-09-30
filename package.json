@@ -1,0 +1,9 @@
+{
+	"name": "pi-prompt-jump",
+	"version": "0.1.0",
+	"private": true,
+	"description": "Pi /jump 命令:跳转到指定用户消息并打开翻阅视图(pager),不切换会话分支",
+	"pi": {
+		"extensions": ["./.pi/extensions/prompt-jump/index.ts"]
+	}
+}
