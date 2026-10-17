@@ -1,9 +1,23 @@
 {
 	"name": "pi-prompt-jump",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"private": true,
 	"description": "Pi /jump 命令:跳转到指定用户消息并打开翻阅视图(pager),不切换会话分支",
+	"scripts": {
+		"build": "node scripts/build.mjs",
+		"test": "node tests/anchors.test.mjs && node tests/dist.test.mjs"
+	},
 	"pi": {
-		"extensions": ["./.pi/extensions/prompt-jump/index.ts"]
+		"extensions": [
+			"./.pi/extensions/prompt-jump/dist/index.js"
+		]
+	},
+	"dependencies": {},
+	"peerDependencies": {
+		"@earendil-works/pi-coding-agent": "*",
+		"@earendil-works/pi-tui": "*"
+	},
+	"devDependencies": {
+		"esbuild": "0.28.2"
 	}
 }
