@@ -27,7 +27,7 @@ import { buildBundle } from "../scripts/build.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
-const DIST = resolve(ROOT, ".pi/extensions/prompt-jump/dist/index.js");
+const DIST = resolve(ROOT, "dist/index.js");
 const PKG_PATH = resolve(ROOT, "package.json");
 const PI_INSTALL = "/Users/a1/.pi/agent/install/releases/0.87.1/node_modules";
 

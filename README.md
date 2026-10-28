@@ -73,23 +73,21 @@ npm ci
 npm run build                # 打 dist/index.js(过三道门禁)
 npm test                     # 跑全部测试(anchors + dist)
 
-# 本仓库内直接作为项目扩展调试(.pi/extensions/ 约定,项目信任后自动加载)
-pi
-# 或显式加载 TS 源(走 jiti,适合调试)
-pi --extension ./.pi/extensions/prompt-jump/index.ts
+# 显式加载 TS 源(走 jiti,适合调试)
+pi --extension ./src/index.ts
 # 或显式加载打包后的 dist(走原生 ESM,等同用户实际体验)
-pi --extension ./.pi/extensions/prompt-jump/dist/index.js
+pi --extension ./dist/index.js
 ```
 
 结构:
 
 ```
-.pi/extensions/prompt-jump/
+src/
   index.ts          # 入口:注册 /jump 命令
   anchors.ts        # 定位层:双模式文档视图解析、用户消息收集、行偏移测量、整文档渲染
   jump-list.ts      # 交互编排:TreeSelector 选择器 → pager overlay 两段式
   pager.ts          # 消息查看器:覆盖整窗 overlay,键盘/滚轮翻阅
-  dist/index.js     # ⚙️ GENERATED(由 npm run build 产出,提交进 git)
+dist/index.js      # ⚙️ GENERATED(由 npm run build 产出,提交进 git)
 scripts/build.mjs   # esbuild 打包脚本(三道门禁:import 白名单 / INLINED_THIRD_PARTY / 体积预算)
 tests/anchors.test.mjs     # 纯逻辑自测(加载 .ts via jiti)
 tests/dist.test.mjs        # dist 产物门禁测试(18 项断言)
@@ -109,10 +107,11 @@ package-lock.json          # devDep 锁版
 因为 pi 的 git 源安装链路(`git clone` + `npm install --omit=dev --legacy-peer-deps`)不跑任何构建、装不上 devDep,所以:
 
 - **dist/index.js 必须提交进 git**(否则用户机器上不存在,扩展静默不加载);
+- **源码只放 `src/`**:`.pi/` 是 pi 的本机状态目录,连同 `.agents/` `.claude/` 等 agent 目录一律不入库;
 - **`dependencies` 永远为空**(所有运行时依赖走"内联 + 登记"或 `node:` 内置);
 - **devDep 用 `npm ci` 锁版**(`package-lock.json` 入库,`esbuild@0.28.2` 精确锁,无 `^`/`~`)。
 
-改完 `.ts` 源码 → 跑 `npm run build` → 提交 `dist/index.js` 的 diff。新鲜度测试(在 `npm test` 里)会自动捕获"忘了重新构建"或"新打的产物与提交的不一致"这两种情况,详见 `AGENTS.md`。
+改完 `src/` 下的 `.ts` 源码 → 跑 `npm run build`(产物路径由 `scripts/build.mjs` 决定,写入仓库根 `dist/`)→ 提交 `dist/index.js` 的 diff。新鲜度测试(在 `npm test` 里)会自动捕获"忘了重新构建"或"新打的产物与提交的不一致"这两种情况,详见 `AGENTS.md`。
 
 ## 已知限制
 

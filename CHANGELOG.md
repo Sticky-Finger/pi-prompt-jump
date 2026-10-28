@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **仓库布局重构**:扩展源码由 `.pi/extensions/prompt-jump/*.ts` 迁至 `src/`;构建产物由 `.pi/extensions/prompt-jump/dist/index.js` 迁至仓库根 `dist/index.js`(由改过 outfile 的 `scripts/build.mjs` 重新 `npm run build` 产出,产物字节与旧产物一致);`package.json` 的 `pi.extensions` 改为 `./dist/index.js`。
+- **`.pi/` 出库**:`.gitignore` 忽略 `/.pi/` 及 `.agents/` `.claude/` `.cursor/` `.aider/` `.codex/` `.gemini/` `.copilot/` `.windsurf/` `.continue/` `.roo/` `.opencode/` 等 agent 目录;`dist/` 仍必须入库(pi 的 git 安装链路不跑构建)。
+- **版本**:0.2.0 → 0.3.0(安装布局变化)。
+
 ## [0.2.0] - 2026-10-17
 
 ### Changed

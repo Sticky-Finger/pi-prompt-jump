@@ -22,7 +22,7 @@ const alias = {
 
 const jiti = createJiti(import.meta.url, { alias, moduleCache: false });
 const pkg = await jiti.import(path.join(piInstall, "@earendil-works/pi-coding-agent/dist/index.js"));
-const anchorsPath = fileURLToPath(new URL("../.pi/extensions/prompt-jump/anchors.ts", import.meta.url));
+const anchorsPath = fileURLToPath(new URL("../src/anchors.ts", import.meta.url));
 const { findChatContainer, collectUserEntries, measureAnchors, resolveConversationView, renderConversationLines } = await jiti.import(anchorsPath);
 
 const { SkillInvocationMessageComponent, UserMessageComponent, initTheme } = pkg;

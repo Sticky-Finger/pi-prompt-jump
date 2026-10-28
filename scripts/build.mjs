@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * scripts/build.mjs — esbuild 打包 .pi/extensions/prompt-jump 为单文件 dist/index.js
+ * scripts/build.mjs — esbuild 打包 src/ 为单文件 dist/index.js
  *
  * 设计要点(详见 docs/plan/20261017-231108-dist-bundle.md §2 / §3.1):
  *   - external 只留 @earendil-works/* 宿主包(从 package.json peerDependencies 读出,不硬编码)
@@ -23,8 +23,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
 const PKG = JSON.parse(await readFile(resolve(ROOT, "package.json"), "utf8"));
 
-const ENTRY = "./.pi/extensions/prompt-jump/index.ts";
-const DEFAULT_OUTFILE = "./.pi/extensions/prompt-jump/dist/index.js";
+const ENTRY = "./src/index.ts";
+const DEFAULT_OUTFILE = "./dist/index.js";
 
 /** 体积预算:原始 / gzip,任一超阈值即构建失败(防止大库被悄悄打进 bundle) */
 const BUDGET = { raw: 30 * 1024, gzip: 12 * 1024 };
