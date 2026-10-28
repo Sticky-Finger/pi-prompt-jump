@@ -1,2 +1,19 @@
-# Pi agent tool state(扩展源码 .pi/extensions/ 需要入库)
-.pi/projects/
+# 依赖
+node_modules/
+
+# ── AI agent 工作目录(本机状态 / 工具产物,一律不入库)──
+/.pi/
+/.agents/
+/.claude/
+/.cursor/
+/.aider/
+/.codex/
+/.gemini/
+/.copilot/
+/.windsurf/
+/.continue/
+/.roo/
+/.opencode/
+
+# ⚠️ dist/ 必须入库(见 AGENTS.md 铁律 1):pi 的 git 安装链路不跑构建
+#    产物缺失 = 扩展静默不加载。切勿把 dist/ 加进忽略列表。
