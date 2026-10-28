@@ -16,6 +16,7 @@ pi-prompt-jump/
 │   └── build.mjs         # esbuild 打包脚本(三道门禁)
 ├── tests/
 │   ├── anchors.test.mjs  # 纯逻辑自测(加载 .ts via jiti)
+│   ├── build.test.mjs    # build.mjs 主要函数单测(导出面:parseArgs/gate* 等)
 │   └── dist.test.mjs     # dist 产物门禁测试
 ├── docs/plan/            # 历史与当前计划(只读存档)
 ├── package.json          # pi.extensions 指向 dist/index.js
@@ -33,7 +34,8 @@ npm ci                                  # 装 devDep(esbuild 0.28.2,精确锁版
 npm run build                           # 打 dist/index.js(过三道门禁)
 node tests/dist.test.mjs                # 验证 dist(18 项断言)
 node tests/anchors.test.mjs             # 验证锚点逻辑
-npm test                                # 上面两个串行
+node tests/build.test.mjs               # 验证 build.mjs 门禁/参数解析(34 项断言)
+npm test                                # 上面三个串行
 
 # 本仓库内调试
 pi --extension ./src/index.ts                # 显式加载 TS 源(走 jiti)

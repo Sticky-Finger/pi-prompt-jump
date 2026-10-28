@@ -6,6 +6,8 @@
  *   - external 只留 @earendil-works/* 宿主包(从 package.json peerDependencies 读出,不硬编码)
  *   - 构建后三道门禁:import 白名单 / INLINED_THIRD_PARTY 比对 / 体积预算
  *   - 既被直接执行,也被 tests/dist.test.mjs import 调用(共享 buildBundle 避免参数漂移)
+ *   - 纯函数(parseArgs/peerExternals/thirdPartyFromMetafile/collectImportSpecifiers/gate*)均已导出,
+ *     由 tests/build.test.mjs 做正向 + 失败路径单测
  *
  * CLI 用法:
  *   node scripts/build.mjs                       # 默认:minify, 写 dist/index.js
@@ -27,17 +29,17 @@ const ENTRY = "./src/index.ts";
 const DEFAULT_OUTFILE = "./dist/index.js";
 
 /** 体积预算:原始 / gzip,任一超阈值即构建失败(防止大库被悄悄打进 bundle) */
-const BUDGET = { raw: 30 * 1024, gzip: 12 * 1024 };
+export const BUDGET = { raw: 30 * 1024, gzip: 12 * 1024 };
 
 /** 允许保留在产物 import 语句里的说明符前缀(其余一律内联或构建失败) */
-const ALLOWED_IMPORT_PREFIXES = ["node:", "@earendil-works/"];
+export const ALLOWED_IMPORT_PREFIXES = ["node:", "@earendil-works/"];
 
 /** 当前内联的第三方包清单(空:本项目目前无任何内联第三方包)。
  *  引入新第三方包时必须在此登记:包名 / 精确版本 / 体积 / 许可 + 上游审计链接。
  *  metafile 比对门禁会强制此清单与实际打进产物的第三方包集合完全一致。 */
-const INLINED_THIRD_PARTY = Object.freeze([]);
+export const INLINED_THIRD_PARTY = Object.freeze([]);
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
 	const args = { minify: true, report: false, outfile: DEFAULT_OUTFILE };
 	for (let i = 0; i < argv.length; i++) {
 		const a = argv[i];
@@ -49,13 +51,13 @@ function parseArgs(argv) {
 	return args;
 }
 
-function peerExternals() {
-	const peers = PKG.peerDependencies ?? {};
+export function peerExternals(pkg = PKG) {
+	const peers = pkg.peerDependencies ?? {};
 	return Object.keys(peers);
 }
 
 /** 从 metafile inputs 中抽取第三-party 包名(路径含 /node_modules/<name>/ 的那段) */
-function thirdPartyFromMetafile(metafile) {
+export function thirdPartyFromMetafile(metafile) {
 	const names = new Set();
 	for (const inputPath of Object.keys(metafile.inputs)) {
 		const m = inputPath.match(/node_modules\/((?:@[^/]+\/)?[^/]+)/);
@@ -64,18 +66,25 @@ function thirdPartyFromMetafile(metafile) {
 	return names;
 }
 
-/** 门禁 1:扫产物 import 语句,只允许白名单前缀 + 相对路径 */
-function gateImportWhitelist(outBytes) {
-	const src = outBytes.toString("utf8");
+/** 扫源码,返回全部非相对路径的 import/export 说明符集合 */
+export function collectImportSpecifiers(src) {
 	// 匹配 import ... from "x" / import("x") / export ... from "x"
 	const re = /(?:^|[^\w$])(?:import\s*(?:[^"';]+from\s*)?|export\s*(?:[^"';]+from\s*)?|import\s*\(\s*|from\s*)["']([^"']+)["']/g;
-	const offenders = new Set();
+	const specs = new Set();
 	let m;
 	while ((m = re.exec(src))) {
 		const spec = m[1];
 		if (spec.startsWith(".") || spec.startsWith("/")) continue; // 相对路径,已内联
-		if (ALLOWED_IMPORT_PREFIXES.some((p) => spec.startsWith(p))) continue;
-		offenders.add(spec);
+		specs.add(spec);
+	}
+	return specs;
+}
+
+/** 门禁 1:扫产物 import 语句,只允许白名单前缀 + 相对路径 */
+export function gateImportWhitelist(outBytes) {
+	const offenders = new Set();
+	for (const spec of collectImportSpecifiers(outBytes.toString("utf8"))) {
+		if (!ALLOWED_IMPORT_PREFIXES.some((p) => spec.startsWith(p))) offenders.add(spec);
 	}
 	if (offenders.size > 0) {
 		throw new Error(`[gate:import-whitelist] 产物中出现未授权的 import: ${[...offenders].join(", ")}`);
@@ -83,9 +92,9 @@ function gateImportWhitelist(outBytes) {
 }
 
 /** 门禁 2:metafile 第三方包集合必须与 INLINED_THIRD_PARTY 完全一致 */
-function gateInlinedThirdParty(metafile) {
+export function gateInlinedThirdParty(metafile, declaredList = INLINED_THIRD_PARTY) {
 	const actual = thirdPartyFromMetafile(metafile);
-	const declared = new Set(INLINED_THIRD_PARTY);
+	const declared = new Set(declaredList);
 	const onlyActual = [...actual].filter((x) => !declared.has(x));
 	const onlyDeclared = [...declared].filter((x) => !actual.has(x));
 	if (onlyActual.length > 0 || onlyDeclared.length > 0) {
@@ -97,20 +106,20 @@ function gateInlinedThirdParty(metafile) {
 }
 
 /** 门禁 3:体积预算 */
-function gateVolume(outBytes) {
+export function gateVolume(outBytes, budget = BUDGET) {
 	const raw = outBytes.length;
 	const gz = gzipSync(outBytes, { level: 9 }).length;
-	if (raw > BUDGET.raw) {
-		throw new Error(`[gate:volume] 原始 ${raw} B 超预算 ${BUDGET.raw} B(${((raw / BUDGET.raw) * 100).toFixed(1)}%)`);
+	if (raw > budget.raw) {
+		throw new Error(`[gate:volume] 原始 ${raw} B 超预算 ${budget.raw} B(${((raw / budget.raw) * 100).toFixed(1)}%)`);
 	}
-	if (gz > BUDGET.gzip) {
-		throw new Error(`[gate:volume] gzip ${gz} B 超预算 ${BUDGET.gzip} B(${((gz / BUDGET.gzip) * 100).toFixed(1)}%)`);
+	if (gz > budget.gzip) {
+		throw new Error(`[gate:volume] gzip ${gz} B 超预算 ${budget.gzip} B(${((gz / budget.gzip) * 100).toFixed(1)}%)`);
 	}
 	return { raw, gz };
 }
 
 export async function buildBundle({ outfile = DEFAULT_OUTFILE, minify = true } = {}) {
-	const externals = peerExternals();
+	const externals = peerExternals(PKG);
 	if (externals.length === 0) {
 		throw new Error("[build] package.json.peerDependencies 为空;无法解析 external 列表");
 	}

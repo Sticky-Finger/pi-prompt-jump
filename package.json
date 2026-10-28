@@ -5,7 +5,7 @@
 	"description": "Pi /jump 命令:跳转到指定用户消息并打开翻阅视图(pager),不切换会话分支",
 	"scripts": {
 		"build": "node scripts/build.mjs",
-		"test": "node tests/anchors.test.mjs && node tests/dist.test.mjs"
+		"test": "node tests/anchors.test.mjs && node tests/dist.test.mjs && node tests/build.test.mjs"
 	},
 	"pi": {
 		"extensions": [
