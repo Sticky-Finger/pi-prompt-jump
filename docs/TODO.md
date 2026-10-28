@@ -1,6 +1,7 @@
 ## 实施 / 规划待审阅
 
 - [x] 实施 dist-bundle 计划：esbuild 单文件打包 + 零依赖门禁（详见 docs/plan/20261017-231108-dist-bundle.md）
+- [ ] 实施 relocate-dist 计划：产物迁到 ./dist（重跑 npm run build 生成）+ .pi/ 出库（详见 docs/plan/20261028-131219-relocate-dist-and-ignore-agent-dirs.md）
 
 ## 技术事项 / 待验证（不紧急）
 
