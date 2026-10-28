@@ -11,10 +11,11 @@
  *   4. collectImportSpecifiers:各类 import/export 语法 / 相对路径过滤 / 伪关键字不误报
  *   5. gateImportWhitelist    :通过 + 三种违规 throw
  *   6. gateInlinedThirdParty  :一致 + 三种不一致 throw 消息
- *   7. gateVolume             :返回值 / raw 超限 / gzip 超限(注入小预算)
+ *   7. gateVolume             :软门禁 —— 返回值 / 超 raw·gzip 预算只产 warnings 不 throw
  *   8. 一致性回归              :真实 dist 产物过 collectImportSpecifiers 全在白名单内
  */
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { gzipSync } from "node:zlib";
 import { dirname, join, resolve } from "node:path";
@@ -172,23 +173,33 @@ check("双向不一致 → throw 同时含两行", () => {
 	);
 });
 
-console.log("7. gateVolume:");
-check("远小于预算 → 返回 {raw, gz} 且与实测一致", () => {
+console.log("7. gateVolume(软门禁:不 throw,只产 warnings):");
+check("远小于预算 → 返回 {raw, gz, warnings:[]} 且与实测一致", () => {
 	const buf = Buffer.from("hello");
 	const vol = gateVolume(buf);
 	assert.equal(vol.raw, buf.length);
 	assert.equal(vol.gz, gzipSync(buf, { level: 9 }).length);
+	assert.deepEqual(vol.warnings, []);
 });
-check("超 raw 预算 → throw 含百分比", () => {
-	const buf = Buffer.alloc(BUDGET.raw + 1024, 0); // 全零可压,但 raw 门禁先触发
-	assert.throws(() => gateVolume(buf), /\[gate:volume\] 原始 \d+ B 超预算/);
+check("超 raw 预算 → 不 throw,warnings 含原始超限条目", () => {
+	const buf = Buffer.alloc(BUDGET.raw + 1024, 0);
+	let vol;
+	assert.doesNotThrow(() => { vol = gateVolume(buf); });
+	assert.equal(vol.warnings.length, 1);
+	assert.match(vol.warnings[0], /\[gate:volume\] 原始 \d+ B 超预算/);
 });
-check("raw 达标但超 gzip 预算 → throw(注入小预算)", () => {
+check("raw 达标但超 gzip 预算 → 不 throw,warnings 含 gzip 条目(注入小预算)", () => {
 	const buf = Buffer.alloc(1024, 7); // raw 1024 ≤ 2048;不可压缩到 4 B 以下
-	assert.throws(
-		() => gateVolume(buf, { raw: 2048, gzip: 4 }),
-		/\[gate:volume\] gzip \d+ B 超预算 4 B/,
-	);
+	const vol = gateVolume(buf, { raw: 2048, gzip: 4 });
+	assert.equal(vol.warnings.length, 1);
+	assert.match(vol.warnings[0], /\[gate:volume\] gzip \d+ B 超预算 4 B/);
+});
+check("raw 与 gzip 双超限 → warnings 两条", () => {
+	const buf = randomBytes(BUDGET.raw + 1024); // 随机字节不可压,raw/gzip 同时超限
+	const vol = gateVolume(buf);
+	assert.equal(vol.warnings.length, 2);
+	assert.match(vol.warnings[0], /原始/);
+	assert.match(vol.warnings[1], /gzip/);
 });
 
 console.log("8. 一致性回归(真实产物):");

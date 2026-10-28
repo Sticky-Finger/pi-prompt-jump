@@ -7,7 +7,7 @@
  * 覆盖(对齐 docs/plan/20261017-231108-dist-bundle.md §3.4):
  *   1. 新鲜度   :重打到 <tmp>,与提交的 dist/index.js 字节一致
  *   2. 单文件   :dist/ 下有且只有 index.js
- *   3. 体积预算 :原始 ≤ 30 KB;gzip ≤ 12 KB
+ *   3. 体积提示 :软门禁 —— 重打产物无 gateVolume warnings(超预算不再失败)
  *   4. 无泄漏   :产物不含本机绝对路径 / sourcemap 注释 / builder banner
  *   5. 内容完整 :产物含 "registerCommand" / "jump" 字符串
  *   6. 可加载   :复制到 <tmp>,await import 拿到 default 是 function
@@ -20,7 +20,6 @@ import { spawnSync } from "node:child_process";
 import { mkdtemp, readFile, readdir, symlink, copyFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
-import { gzipSync } from "node:zlib";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildBundle } from "../scripts/build.mjs";
@@ -81,15 +80,12 @@ check("dist/ 下有且只有 index.js", async () => {
 	assert.deepEqual(files, ["index.js"], `got ${JSON.stringify(files)}`);
 });
 
-console.log("3. 体积预算:");
-check("原始 ≤ 30 KB", () => assert.ok(committedBytes.length <= 30 * 1024, `${committedBytes.length} B`));
-check("gzip ≤ 12 KB", () => {
-	const gz = gzipSync(committedBytes, { level: 9 }).length;
-	assert.ok(gz <= 12 * 1024, `${gz} B`);
+console.log("3. 体积提示(软门禁,超预算不失败):");
+check("重打产物无体积 warning(与构建时判定一致)", () => {
+	assert.deepEqual(vol.warnings, [], vol.warnings.join("; "));
 });
-check("当前体积远低于预算(允许有 5× 余量)", () => {
-	assert.ok(vol.raw <= 30 * 1024 / 2, `raw=${vol.raw}B`);
-	assert.ok(vol.gz <= 12 * 1024 / 2, `gzip=${vol.gz}B`);
+check("体积实测为正数", () => {
+	assert.ok(vol.raw > 0 && vol.gz > 0, `raw=${vol.raw} gz=${vol.gz}`);
 });
 
 console.log("4. 无环境泄漏:");

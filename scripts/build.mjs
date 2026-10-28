@@ -4,7 +4,8 @@
  *
  * 设计要点(详见 docs/plan/20261017-231108-dist-bundle.md §2 / §3.1):
  *   - external 只留 @earendil-works/* 宿主包(从 package.json peerDependencies 读出,不硬编码)
- *   - 构建后三道门禁:import 白名单 / INLINED_THIRD_PARTY 比对 / 体积预算
+ *   - 构建后两道硬门禁(import 白名单 / INLINED_THIRD_PARTY 比对,违例即失败)
+ *     + 一道体积软门禁(超预算只 warning 不阻塞,详见 docs/plan/20261028-213221-volume-budget-soft-gate.md)
  *   - 既被直接执行,也被 tests/dist.test.mjs import 调用(共享 buildBundle 避免参数漂移)
  *   - 纯函数(parseArgs/peerExternals/thirdPartyFromMetafile/collectImportSpecifiers/gate*)均已导出,
  *     由 tests/build.test.mjs 做正向 + 失败路径单测
@@ -28,7 +29,8 @@ const PKG = JSON.parse(await readFile(resolve(ROOT, "package.json"), "utf8"));
 const ENTRY = "./src/index.ts";
 const DEFAULT_OUTFILE = "./dist/index.js";
 
-/** 体积预算:原始 / gzip,任一超阈值即构建失败(防止大库被悄悄打进 bundle) */
+/** 体积提示(软门禁):超限只产 warning 不阻塞打包;硬门禁仅剩 import 白名单 / INLINED_THIRD_PARTY 两道。
+ *  阈值语义见 docs/plan/20261028-213221-volume-budget-soft-gate.md */
 export const BUDGET = { raw: 30 * 1024, gzip: 12 * 1024 };
 
 /** 允许保留在产物 import 语句里的说明符前缀(其余一律内联或构建失败) */
@@ -105,17 +107,18 @@ export function gateInlinedThirdParty(metafile, declaredList = INLINED_THIRD_PAR
 	}
 }
 
-/** 门禁 3:体积预算 */
+/** 体积软门禁:超预算只返回 warnings,不 throw、不阻塞打包(决策见 docs/plan/20261028-213221-volume-budget-soft-gate.md) */
 export function gateVolume(outBytes, budget = BUDGET) {
 	const raw = outBytes.length;
 	const gz = gzipSync(outBytes, { level: 9 }).length;
+	const warnings = [];
 	if (raw > budget.raw) {
-		throw new Error(`[gate:volume] 原始 ${raw} B 超预算 ${budget.raw} B(${((raw / budget.raw) * 100).toFixed(1)}%)`);
+		warnings.push(`[gate:volume] 原始 ${raw} B 超预算 ${budget.raw} B(${((raw / budget.raw) * 100).toFixed(1)}%)`);
 	}
 	if (gz > budget.gzip) {
-		throw new Error(`[gate:volume] gzip ${gz} B 超预算 ${budget.gzip} B(${((gz / budget.gzip) * 100).toFixed(1)}%)`);
+		warnings.push(`[gate:volume] gzip ${gz} B 超预算 ${budget.gzip} B(${((gz / budget.gzip) * 100).toFixed(1)}%)`);
 	}
-	return { raw, gz };
+	return { raw, gz, warnings };
 }
 
 export async function buildBundle({ outfile = DEFAULT_OUTFILE, minify = true } = {}) {
@@ -143,6 +146,7 @@ export async function buildBundle({ outfile = DEFAULT_OUTFILE, minify = true } =
 	gateImportWhitelist(outBytes);
 	gateInlinedThirdParty(meta);
 	const vol = gateVolume(outBytes);
+	for (const w of vol.warnings) console.warn(`⚠ ${w}`);
 
 	return { outBytes, vol, externals, inlinedThirdParty: [...thirdPartyFromMetafile(meta)] };
 }
@@ -167,7 +171,7 @@ async function main() {
 	const s = await stat(resolve(ROOT, args.outfile));
 
 	console.log(
-		`✔ ${args.outfile}  ${fmtKB(s.size)}  (gzip ${fmtKB(vol.gz)})  build=${ms}ms  externals=[${externals.join(", ")}]  inlined=[]`,
+		`✔ ${args.outfile}  ${fmtKB(s.size)}  (gzip ${fmtKB(vol.gz)})  build=${ms}ms  externals=[${externals.join(", ")}]  inlined=[]${vol.warnings.length ? `  (warning: ${vol.warnings.length})` : ""}`,
 	);
 	if (args.report) {
 		console.log(`  externals: ${externals.join(", ")}`);

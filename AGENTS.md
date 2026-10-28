@@ -13,7 +13,7 @@ pi-prompt-jump/
 │   └── pager.ts          # 消息查看器 overlay
 ├── dist/index.js         # ⚙️ GENERATED(由 npm run build 产出,提交进 git)
 ├── scripts/
-│   └── build.mjs         # esbuild 打包脚本(三道门禁)
+│   └── build.mjs         # esbuild 打包脚本(两道硬门禁 + 体积软门禁)
 ├── tests/
 │   ├── anchors.test.mjs  # 纯逻辑自测(加载 .ts via jiti)
 │   ├── build.test.mjs    # build.mjs 主要函数单测(导出面:parseArgs/gate* 等)
@@ -31,10 +31,10 @@ pi-prompt-jump/
 npm ci                                  # 装 devDep(esbuild 0.28.2,精确锁版)
 
 # 改源码后必做
-npm run build                           # 打 dist/index.js(过三道门禁)
-node tests/dist.test.mjs                # 验证 dist(18 项断言)
+npm run build                           # 打 dist/index.js(过两道硬门禁;体积超预算仅 warning)
+node tests/dist.test.mjs                # 验证 dist(17 项断言)
 node tests/anchors.test.mjs             # 验证锚点逻辑
-node tests/build.test.mjs               # 验证 build.mjs 门禁/参数解析(34 项断言)
+node tests/build.test.mjs               # 验证 build.mjs 门禁/参数解析(35 项断言)
 npm test                                # 上面三个串行
 
 # 本仓库内调试
@@ -60,7 +60,7 @@ pi -ne -e .                                  # 一次性试用本仓库,加载 d
 - **regular 模式滚轮归终端管**:pager 内仅键盘翻阅;fullscreen 模式滚轮可用。
 - **依赖宿主半公开结构**:`getPrimaryScrollView`、document/chat 容器层级等已做形状校验 + try/catch 降级;结构不符时提示"跳转失败"而非崩溃。
 - **esbuild 锁版**:`package.json` 中 `esbuild` 必须精确锁版(无 `^`/`~`)。升级版本 = 重新 build + 提交新 dist + 验证字节差异在 commit message 里说明。
-- **体积预算余量**:`raw ≤ 30 KB` / `gzip ≤ 12 KB`。当前 5.5 KB / 2.4 KB,留 ~5× 余量。引入新第三方包前对照 `docs/plan/.../§附录 A.5` 价目表。
+- **体积预算为软门禁(参考值,不阻塞)**:`raw ≤ 30 KB` / `gzip ≤ 12 KB`。超预算 `npm run build` 只打 warning、产物照常写出,是否提交由人工判断(决策与背景见 `docs/plan/20261028-213221-volume-budget-soft-gate.md`)。当前 5.5 KB / 2.4 KB,留 ~5× 余量。引入新第三方包前对照 `docs/plan/.../§附录 A.5` 价目表。注意:import 白名单与 INLINED_THIRD_PARTY 仍是**硬门禁**,违例直接构建失败。
 - **测试需要本机 pi 安装**:`tests/dist.test.mjs §6/§7` 通过 symlink `/Users/a1/.pi/agent/install/releases/0.87.1/node_modules` 解析 `@earendil-works/*`。换机器 / 升 pi 后**必须更新此路径**或在测试里加探测逻辑。
 
 ## File generation rules
