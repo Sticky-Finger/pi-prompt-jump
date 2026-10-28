@@ -2,13 +2,19 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/),版本遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [0.2.1] - 2026-10-28
+
+### Added
+
+- **测试**:`tests/build.test.mjs` 对 `scripts/build.mjs` 主要函数(parseArgs / peerExternals / thirdPartyFromMetafile / collectImportSpecifiers / 三道 gate*)做正向 + 失败路径单测(36 项断言);`build.mjs` 相应导出内部函数与常量,构建行为零变化(产物字节一致)。
+- **文档**:本 `CHANGELOG.md`;`docs/plan/20261028-153322-build-unit-tests.md`、`docs/plan/20261028-213221-volume-budget-soft-gate.md` 两份设计与验证记录。
 
 ### Changed
 
 - **仓库布局重构**:扩展源码由 `.pi/extensions/prompt-jump/*.ts` 迁至 `src/`;构建产物由 `.pi/extensions/prompt-jump/dist/index.js` 迁至仓库根 `dist/index.js`(由改过 outfile 的 `scripts/build.mjs` 重新 `npm run build` 产出,产物字节与旧产物一致);`package.json` 的 `pi.extensions` 改为 `./dist/index.js`。
 - **`.pi/` 出库**:`.gitignore` 忽略 `/.pi/` 及 `.agents/` `.claude/` `.cursor/` `.aider/` `.codex/` `.gemini/` `.copilot/` `.windsurf/` `.continue/` `.roo/` `.opencode/` 等 agent 目录;`dist/` 仍必须入库(pi 的 git 安装链路不跑构建)。
-- **版本**:0.2.0 → 0.3.0(安装布局变化)。
+- **体积预算降为软门禁**:`gateVolume` 超预算不再阻塞构建,改为 stderr 输出 warning 并在成功行标记 `(warning: N)`;`tests/dist.test.mjs` §3 的体积硬断言放宽为软检查。import 白名单与 `INLINED_THIRD_PARTY` 比对两道门禁**维持阻塞不变**(决策见 `docs/plan/20261028-213221-volume-budget-soft-gate.md`)。
+- **版本**:0.3.0 → 0.2.1(布局与构建门禁视为 0.2.0 特性的完善,不升 minor;`package.json` 与 `package-lock.json` 根版本号同步为 0.2.1,lock 仅改版本号、不展开 peer 依赖树)。
 
 ## [0.2.0] - 2026-10-17
 
